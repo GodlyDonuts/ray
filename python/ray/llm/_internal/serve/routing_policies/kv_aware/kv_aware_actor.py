@@ -26,9 +26,7 @@ _TENANT_ID = "default"
 
 
 def get_worker_id(replica_unique_id: str) -> int:
-    """
-    Deterministically derive a Dynamo worker id from a replica's unique id.
-    """
+    """Deterministically derive a Dynamo worker id from a replica's unique id."""
     return int.from_bytes(
         hashlib.blake2b(replica_unique_id.encode(), digest_size=8).digest(), "big"
     )
@@ -51,17 +49,20 @@ class WorkerSelection(TypedDict):
 class KVRouterActor:
     """Deployment-scoped Ray actor backing KV-aware routing.
 
+    Attached to the LLMServer deployment via Serve's ``DeploymentActorConfig``,
+    independent of any replica's lifetime.
+
     1. Created once per deployment, attached to the LLMServer deployment via
        Serve's ``DeploymentActorConfig`` (independent of any replica's lifetime).
     2. Owns an in-process Dynamo ``SelectionService``.
-    3. Tracks live replicas via a ``LongPollClient`` on ``DEPLOYMENT_TARGETS``:
-       replicas advertise their engine KV-events endpoint through
-       ``record_routing_stats``, and ``_on_deployment_targets`` registers new
-       workers (the service dials them connect-out) and evicts departed ones.
-    4. The ``SelectionService`` maintains a global KV index radix tree, fed by every
-       replica's KV events; each node records which workers hold that KV block.
-    5. TODO (jeffreywang): Scoring ranks candidate workers by KV-cache overlap (queried
-       from the KV index) plus prefill/decode load to pick the best worker.
+    3. Tracks live replicas via a ``LongPollClient`` on ``DEPLOYMENT_TARGETS``,
+       mapping each running replica to a Dynamo worker id.
+    4. The ``SelectionService`` maintains a global KV index
+       radix tree, fed by every replica's KV events; each node records which
+       workers hold that KV block.
+    5. TODO (jeffreywang): Scoring ranks candidate workers by KV-cache overlap
+       (queried from the KV index) plus prefill/decode load to pick the best
+       worker.
     """
 
     def __init__(self, block_size: int):
@@ -73,12 +74,7 @@ class KVRouterActor:
         self._start_replica_tracking()
 
     def _create_selection_service(self) -> None:
-        """Create the in-process Dynamo selection service for this deployment.
-
-        ai-dynamo is an optional dependency: when it is not installed the actor
-        still tracks replica membership over LongPoll (``_on_deployment_targets``),
-        but KV indexing/scoring is unavailable and ``_svc`` stays ``None``.
-        """
+        """Create the in-process Dynamo selection service for this deployment."""
         # Imported here, not at module scope: Ray pickles this actor class by
         # value, and Dynamo's pyo3 classes cannot be pickled as its globals.
         try:
@@ -123,44 +119,40 @@ class KVRouterActor:
         task.add_done_callback(self._pending_tasks.discard)
 
     def _on_deployment_targets(self, target_info: DeploymentTargetInfo) -> None:
-        """LongPoll listener: reconcile selection-service workers against the
-        running-replica snapshot.
+        """LongPoll listener: reconcile tracked workers against the running-replica
+        snapshot.
 
-        Each replica advertises its KV-events endpoint via
-        ``record_routing_stats`` (carried in ``RunningReplicaInfo.routing_stats``
-        and rebroadcast when it changes). Replicas newly carrying that endpoint
-        are registered with the selection service; departed replicas are evicted.
+        Each replica advertises its KV-events endpoint via ``record_routing_stats``
+        (carried in ``RunningReplicaInfo.routing_stats``); newly advertised replicas
+        are registered with the selection service and departed ones evicted.
         """
-        members = set()
-        advertised: Dict[int, tuple] = {}
+        members: Dict[int, tuple] = {}
         for replica in target_info.running_replicas:
             worker_id = get_worker_id(replica.replica_id.unique_id)
-            members.add(worker_id)
             kv_event_metadata = replica.routing_stats.get("kv_event_metadata")
             if kv_event_metadata is not None:
-                advertised[worker_id] = (
+                members[worker_id] = (
                     replica.replica_id.to_full_id_str(),
                     kv_event_metadata,
                 )
 
         registered = set(self._replica_id_by_worker)
+        added = members.keys() - registered
+        removed = registered - members.keys()
 
-        for worker_id in registered - members:
+        for worker_id in removed:
             self.remove_worker(worker_id)
             self._replica_id_by_worker.pop(worker_id, None)
-
-        for worker_id in advertised.keys() - registered:
-            replica_id, kv_event_metadata = advertised[worker_id]
+        for worker_id in added:
+            replica_id, kv_event_metadata = members[worker_id]
             self._replica_id_by_worker[worker_id] = replica_id
             self._schedule(
                 self._upsert_worker(worker_id, replica_id, kv_event_metadata)
             )
 
-        added = advertised.keys() - registered
-        removed = registered - members
         if added or removed:
             logger.info(
-                "KV selection membership updated: +%d -%d, tracking %d worker(s).",
+                "KV router replica membership updated: +%d -%d, tracking %d worker(s).",
                 len(added),
                 len(removed),
                 len(self._replica_id_by_worker),

@@ -49,13 +49,17 @@ from ray.llm._internal.serve.core.configs.openai_api_models import (
 )
 from ray.llm._internal.serve.core.engine.protocol import LLMEngine
 from ray.llm._internal.serve.core.protocol import RawRequestInfo
-from ray.llm._internal.serve.engines.vllm.vllm_models import VLLMEngineConfig
+from ray.llm._internal.serve.engines.vllm.vllm_models import (
+    VLLMEngineConfig,
+)
 from ray.llm._internal.serve.observability.logging import get_logger
 from ray.llm._internal.serve.routing_policies.kv_aware.kv_events import (
     assign_replica_kv_events_endpoint,
     get_kv_event_routing_stats,
 )
-from ray.llm._internal.serve.utils.node_initialization_utils import initialize_node
+from ray.llm._internal.serve.utils.node_initialization_utils import (
+    initialize_node,
+)
 from ray.util.placement_group import PlacementGroup
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 

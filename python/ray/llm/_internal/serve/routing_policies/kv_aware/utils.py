@@ -19,8 +19,10 @@ def _maybe_setup_kv_aware_routing(
     deployment_options: dict, llm_config: LLMConfig
 ) -> None:
     """Set up KV-aware routing when the deployment's request router is a
-    KVAwareRouter: attach the KVRouterActor which maintains the global KV
-    radix tree, and enable the engine KV events that feed it.
+    KVAwareRouter.
+
+    Attaches the KVRouterActor, which owns the deployment's global KV radix
+    tree, and enables the engine KV events that feed it.
     """
     request_router_config = deployment_options.get("request_router_config")
     if isinstance(request_router_config, dict):
