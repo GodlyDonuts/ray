@@ -1,16 +1,17 @@
 import logging
 from typing import Any, Dict, Optional
 
+from vllm.config import CacheConfig
+
 import ray
 from ray import serve
 from ray.llm._internal.serve.core.configs.llm_config import LLMConfig
 from ray.llm._internal.serve.routing_policies.kv_aware.constants import (
     DEFAULT_KV_EVENTS_PORT_BASE,
-    KV_EVENTS_PORT_BASE_KEY,
     DEFAULT_KV_EVENTS_REPLAY_PORT_OFFSET,
+    KV_EVENTS_PORT_BASE_KEY,
 )
 from ray.serve._private.constants import SERVE_LOGGER_NAME
-from vllm.config import CacheConfig
 
 logger = logging.getLogger(SERVE_LOGGER_NAME)
 

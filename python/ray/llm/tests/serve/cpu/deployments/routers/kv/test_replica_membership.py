@@ -67,10 +67,13 @@ def get_live_replica_worker_ids(app_name, deployment_name="Driver"):
 
 @pytest.fixture(scope="module")
 def serve_instance():
-    if not ray.is_initialized():
-        ray.init(address="auto")
+    started = not ray.is_initialized()
+    if started:
+        ray.init()
     yield
     serve.shutdown()
+    if started:
+        ray.shutdown()
 
 
 def test_yaml_config_attaches_kv_actor(serve_instance):

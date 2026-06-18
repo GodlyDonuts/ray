@@ -31,9 +31,12 @@ def make_kv_aware_llm_config(**kwargs) -> LLMConfig:
 
 @pytest.fixture(scope="module")
 def ray_instance():
-    if not ray.is_initialized():
-        ray.init(address="auto")
+    started = not ray.is_initialized()
+    if started:
+        ray.init()
     yield
+    if started:
+        ray.shutdown()
 
 
 class TestConfigureKvEvents:
