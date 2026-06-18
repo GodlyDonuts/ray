@@ -11,9 +11,7 @@ from ray.llm._internal.serve.constants import (
     DEFAULT_MAX_ONGOING_REQUESTS,
     DEFAULT_MAX_TARGET_ONGOING_REQUESTS,
 )
-from ray.llm._internal.serve.core.configs.llm_config import (
-    LLMConfig,
-)
+from ray.llm._internal.serve.core.configs.llm_config import LLMConfig
 from ray.llm._internal.serve.core.server.llm_server import LLMServer
 from ray.llm._internal.serve.observability.logging import get_logger
 from ray.llm._internal.serve.routing_policies.kv_aware.utils import (
@@ -79,7 +77,7 @@ def build_llm_deployment(
         DEFAULT_DEPLOYMENT_OPTIONS, deployment_options
     )
 
-    _maybe_setup_kv_aware_routing(deployment_options)
+    _maybe_setup_kv_aware_routing(deployment_options, llm_config)
 
     logger.info("============== Deployment Options ==============")
     logger.info(pprint.pformat(deployment_options))
